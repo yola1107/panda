@@ -138,11 +138,18 @@ formatters:
   enable:
     - gofumpt # 包含 gofmt 规则，并追加更严格的格式约束
     - goimports # 整理导入：补充缺失项，移除未使用项
+    - gci # 按标准库、项目包、第三方包分组，组间留空行
     # - gofmt    # 已由 gofumpt 覆盖，无需重复启用
-    # - gci      # 自定义导入分组和排序，当前不额外启用
     # - golines  # 自动折行可能影响可读性，暂不启用
     # - swaggo   # 使用 swaggo 时再启用其注释格式化
   settings:
+    gci:
+      # 严格按以下顺序分组，各组内部按导入路径排序。
+      custom-order: true
+      sections:
+        - standard # Go 标准库
+        - localmodule # 当前 module 内的项目包
+        - default # 第三方包
     gofumpt:
       # 等价于模板中已弃用的 extra-rules: true。
       extra:

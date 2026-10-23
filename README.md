@@ -28,6 +28,7 @@ Go 依赖版本参考该模板；工具安装可由 Go 自动下载所需工具�
 以 `golang-lint` 技能的标准模板为基线，启用其中 47 个 linter，保留其阈值及 `gofumpt` / `goimports` 格式配置。项目适配包括：
 
 - 显式启用规则，避免工具升级时默认集合变化。
+- 使用 `gci` 将导入按标准库、项目包、第三方包排序，组间留空行；项目包根据根目录 module 自动识别。
 - 移除 `nolintlint` 及其抑制注释格式要求；[AGENTS.md](AGENTS.md) 规定手写 Go 代码禁止使用 `//nolint`。
 - 将已弃用的 `gofumpt.extra-rules` 改为等价的 `extra.group-params` 与 `extra.clothe-returns`，写法见 [格式工具文档](https://golangci-lint.run/docs/formatters/configuration/#gofumpt)。
 - 按标准生成标记排除 Protobuf、Wire、Ent 产物；手写代码、测试、schema、examples 和 testutils 仍在检查范围内。
