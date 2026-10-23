@@ -11,8 +11,12 @@ run:
   modules-download-mode: readonly
 
 issues:
-  max-issues-per-linter: 0 # 0 表示不限制数量，输出全部问题
-  max-same-issues: 50
+  max-issues-per-linter: 0 # 不限制单个 linter 的告警数量
+  max-same-issues: 0 # 不限制相同文本的告警数量
+  uniq-by-line: false # 保留同一行的不同诊断
+
+output:
+  show-stats: true # 输出总数与各 linter 的告警数量
 
 linters:
   # 显式列出启用项，避免工具升级改变默认检查集合。

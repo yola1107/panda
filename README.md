@@ -126,6 +126,7 @@ Go 依赖版本参考该模板；工具安装可由 Go 自动下载所需工具�
 以 `golang-lint` 技能的标准模板为基线，按项目需要配置检查项与阈值。项目适配包括：
 
 - 显式启用规则，避免工具升级时默认集合变化。
+- 取消单个 linter、相同文本的数量限制和按行合并，输出诊断总数及分类统计；格式问题仍按工具内置规则对同一文件合并。
 - 沿用 Kratos 启用 `dogsled`、`prealloc` 和 `mnd`；`mnd` 只检查 `case`、条件和返回值，数字常量按实际含义命名。
 - 同时检查圈复杂度（`gocyclo`，阈值 13）和认知复杂度（`gocognit`，阈值 15），约束分支路径及嵌套带来的阅读负担；手写代码和测试均参与检查。
 - 保留 `revive` 默认规则，增加 `early-return`，提示提前结束失败分支；使用 `preserve-scope` 避免扩大变量作用域。
@@ -173,4 +174,4 @@ golangci-lint 没有全面禁用 `//nolint` 的配置开关，移除 `nolintlint
 
 `make lint` 也会报告已启用格式工具发现的问题，不修改源文件；命令行为见 [官方 CLI 文档](https://golangci-lint.run/docs/configuration/cli/)。
 
-AI 开发约束见 [AGENTS.md](AGENTS.md)。
+使用 AI 开发时，先让工具读取 [AGENTS.md](AGENTS.md)。其中约定的清理流程无需安装额外 skill。

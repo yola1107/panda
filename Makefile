@@ -4,7 +4,7 @@ BUF ?= buf
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .DEFAULT_GOAL := help
-.PHONY: init api generate build test all lint-config lint lint-fix fmt help
+.PHONY: init api generate build test check all lint-config lint lint-fix fmt help
 
 init: ## 安装开发工具
 	go install github.com/google/wire/cmd/wire@v0.7.0
@@ -29,6 +29,9 @@ build: ## 编译全部包，将服务可执行文件输出到 bin/
 
 test: ## 运行全部包的单元测试
 	go test ./...
+
+check: ## 检查 Protobuf 协议规范
+	$(BUF) lint
 
 all: ## 依次生成 API 和其他代码
 	$(MAKE) api
