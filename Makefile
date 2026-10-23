@@ -1,28 +1,24 @@
+DIR ?= .
 GOLANGCI_LINT ?= golangci-lint
 BUF ?= buf
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: init
-# install development tools
-init:
+.DEFAULT_GOAL := help
+.PHONY: init api generate build test all lint-config lint lint-fix fmt help
+
+init: ## 安装开发工具
 	go install github.com/google/wire/cmd/wire@v0.7.0
 	go install github.com/bufbuild/buf/cmd/buf@v1.74.0
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 
-.PHONY: api
-# generate Protobuf, gRPC, HTTP code and OpenAPI docs
-api:
+api: ## 生成 Protobuf、gRPC、HTTP 代码和 OpenAPI 文档
 	$(BUF) generate --template buf.gen.yaml
 
-.PHONY: generate
-# generate code and tidy shared module dependencies
-generate:
+generate: ## 生成代码并整理共享 module 的依赖
 	go generate ./...
 	go mod tidy
 
-.PHONY: build
-# build all packages and service binaries into bin
-build:
+build: ## 编译全部包，将服务可执行文件输出到 bin/
 	go build ./...
 	@main_packages=$$(go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...) && \
 	if [ -n "$$main_packages" ]; then \
@@ -30,53 +26,25 @@ build:
 		go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ $$main_packages; \
 	fi
 
-.PHONY: test
-# run unit tests for all packages
-test:
+test: ## 运行全部包的单元测试
 	go test ./...
 
-.PHONY: all
-# generate API and other code
-all:
+all: ## 依次生成 API 和其他代码
 	$(MAKE) api
 	$(MAKE) generate
 
-.PHONY: lint-config
-# verify lint configuration
-lint-config:
+lint-config: ## 校验 lint 配置
 	$(GOLANGCI_LINT) config verify --config .golangci.yml
 
-.PHONY: lint
-# lint all packages and tests in the shared module
-lint:
-	$(GOLANGCI_LINT) run --config .golangci.yml ./...
+lint: ## 检查 Go 代码和测试（支持 DIR，默认全仓）
+	cd "$(DIR)" && $(GOLANGCI_LINT) run --config "$(CURDIR)/.golangci.yml" ./...
 
-.PHONY: lint-fix
-# apply lint fixes and formatting
-lint-fix:
-	$(GOLANGCI_LINT) run --config .golangci.yml --fix ./...
+lint-fix: ## 自动修复 lint 和格式问题（支持 DIR，默认全仓）
+	cd "$(DIR)" && $(GOLANGCI_LINT) run --config "$(CURDIR)/.golangci.yml" --fix ./...
 
-.PHONY: fmt
-# format handwritten Go source
-fmt:
-	$(GOLANGCI_LINT) fmt --config .golangci.yml ./...
+fmt: ## 格式化手写 Go 代码（支持 DIR，默认全仓）
+	cd "$(DIR)" && $(GOLANGCI_LINT) fmt --config "$(CURDIR)/.golangci.yml" ./...
 
-.PHONY: help
-# show help
-help:
-	@echo ''
-	@echo 'Usage:'
-	@echo ' make [target]'
-	@echo ''
-	@echo 'Targets:'
-	@awk '/^[a-zA-Z_0-9-]+:/ { \
-		helpMessage = match(lastLine, /^# (.*)/); \
-		if (helpMessage) { \
-			helpCommand = substr($$1, 1, index($$1, ":") - 1); \
-			helpMessage = substr(lastLine, RSTART + 2, RLENGTH); \
-			printf "\033[36m%-22s\033[0m %s\n", helpCommand, helpMessage; \
-		} \
-	} \
-	{ lastLine = $$0 }' $(MAKEFILE_LIST)
-
-.DEFAULT_GOAL := help
+help: ## 显示帮助
+	@printf '用法：make <目标> [DIR=目录]\n\n'
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)

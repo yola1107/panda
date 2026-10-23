@@ -55,6 +55,15 @@ make lint       # 检查整个 module 中的服务、共享包和测试
 go test ./...
 ```
 
+`fmt`、`lint` 和 `lint-fix` 支持 `DIR`，默认 `.`，递归处理整个 module。
+指定目录时包含其子目录，仍使用根目录的 `.golangci.yml`：
+
+```sh
+make lint DIR=api/helloworld
+make lint-fix DIR=api/helloworld
+make fmt DIR=api/helloworld
+```
+
 golangci-lint 没有全面禁用 `//nolint` 的配置开关，移除 `nolintlint` 也不会使抑制注释失效。这里通过开发约定禁止使用，参见 [上游说明](https://github.com/golangci/golangci-lint/discussions/3015)。
 
 `make lint` 也会报告已启用格式工具发现的问题，不修改源文件；命令行为见 [官方 CLI 文档](https://golangci-lint.run/docs/configuration/cli/)。
