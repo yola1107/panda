@@ -8,13 +8,13 @@ option go_package = "github.com/yola1107/panda/api/panda/route/v1;routev1";
 // Kind 声明客户端上行交互，未声明的方法仍为普通 RPC。
 enum Kind {
   KIND_UNSPECIFIED = 0;
-  KIND_REQUEST = 1;
-  KIND_NOTIFY = 2;
-  KIND_LOGIN = 3;
+  KIND_REQUEST     = 1;
+  KIND_NOTIFY      = 2;
+  KIND_LOGIN       = 3;
 }
 message Route {
   uint32 number = 1;
-  Kind kind = 2;
+  Kind kind     = 2;
 }
 message Push {
   uint32 number = 1;

@@ -3,44 +3,6 @@ package panda.internal.v1;
 
 option go_package = "github.com/yola1107/panda/api/panda/transport/v1;internalv1";
 
-// Connection 由 Gate 按入口填写，不接受客户端身份字段。
-message Connection {
-  string gate_id = 1;
-  string connection_id = 2;
-  string service = 3;
-  string codec = 4;
-}
-
-// Session 仅在认证成功后存在。
-message Session {
-  string id = 1;
-  string user_id = 2;
-}
-
-// ForwardRequest 的登录转交不含 Session。
-message ForwardRequest {
-  Connection connection = 1;
-  Session session = 2;
-  uint32 route = 3;
-  uint32 type = 4;
-  bytes payload = 5;
-}
-
-// ForwardReply 将认证结果与客户端 payload 分离。
-message ForwardReply {
-  bytes payload = 1;
-  string authenticated_user = 2;
-}
-
-// PushRequest 直接投递到持有连接的 Gate。
-message PushRequest {
-  string gate_id = 1;
-  string session_id = 2;
-  uint32 route = 3;
-  bytes payload = 4;
-}
-message PushReply {}
-
 // Node 只在可信内部网络暴露，调用方须由部署层认证。
 service Node {
   rpc Forward(ForwardRequest) returns (ForwardReply);
@@ -50,3 +12,41 @@ service Node {
 service Gate {
   rpc Deliver(PushRequest) returns (PushReply);
 }
+
+// Connection 由 Gate 按入口填写，不接受客户端身份字段。
+message Connection {
+  string gate_id       = 1;
+  string connection_id = 2;
+  string service       = 3;
+  string codec         = 4;
+}
+
+// Session 仅在认证成功后存在。
+message Session {
+  string id      = 1;
+  string user_id = 2;
+}
+
+// ForwardRequest 的登录转交不含 Session。
+message ForwardRequest {
+  Connection connection = 1;
+  Session session       = 2;
+  uint32 route          = 3;
+  uint32 type           = 4;
+  bytes payload         = 5;
+}
+
+// ForwardReply 将认证结果与客户端 payload 分离。
+message ForwardReply {
+  bytes payload             = 1;
+  string authenticated_user = 2;
+}
+
+// PushRequest 直接投递到持有连接的 Gate。
+message PushRequest {
+  string gate_id    = 1;
+  string session_id = 2;
+  uint32 route      = 3;
+  bytes payload     = 4;
+}
+message PushReply {}

@@ -32,7 +32,8 @@ linters:
     # 代码风格
     - gocritic # 检查多余转换、遍历时的值复制和冗余代码等问题
     - revive # 检查命名、导出类型及与包名重复的标识符
-    - wsl_v5 # 约束空白和空行，改善代码的视觉分组
+    - funcorder # 检查构造函数位于类型声明之后、方法之前
+    - dogsled # 检查一次赋值中丢弃过多返回值的写法
     - whitespace # 检查多余空白和空行
     - godot # 检查导出符号的注释是否以句号结尾
     - misspell # 检查标识符和注释中的常见英文拼写错误
@@ -42,6 +43,7 @@ linters:
     - asciicheck # 检查非 ASCII 标识符，防范形似字符欺骗
     # 复杂度
     - gocyclo # 检查函数圈复杂度
+    - gocognit # 检查嵌套与控制流带来的认知复杂度
     - nestif # 检查过深的 if/else 嵌套
     - funlen # 限制函数行数和语句数
     - dupl # 检查重复代码
@@ -50,6 +52,8 @@ linters:
     - unconvert # 检查多余的类型转换
     - ineffassign # 检查赋值后未被读取的变量
     - goconst # 检查可提取为常量的重复字面量
+    - mnd # 检查分支、条件和返回值中的魔法数字
+    - prealloc # 检查简单循环中可预分配容量的切片
     # 安全与资源管理
     - gosec # 检查 SQL 注入、硬编码凭据、弱加密和路径穿越等问题
     - bidichk # 检查危险的 Unicode 双向控制字符（CVE-2021-42574）
@@ -75,20 +79,17 @@ linters:
     - exhaustive # 检查 switch 是否覆盖全部枚举值
 
   disable:
+    - wsl_v5 # 空行按语义分组，避免强制分隔连续流程
     - lll # 行长检查；采用 gofmt/gofumpt 排版，不额外限制行长
-    - prealloc # 预分配建议的误报较多，性能分析确认需要后再启用
     - wrapcheck # 强制包装所有外部错误，默认启用会产生较多干扰
     - err113 # 强制使用包级哨兵错误，对常见错误处理方式限制过多
-    - mnd # 魔法数字检查；连 HTTP 200 等明确数值也会报告，暂不启用
     - iface # 接口污染检查；规则较主观，暂不启用
     - nakedret # 裸返回检查；已有 funlen 限制函数长度，暂不额外约束
     - noinlineerr # 禁止在 if 初始化语句中处理错误，与常见 Go 写法冲突
-    - gocognit # 认知复杂度检查；与 gocyclo、nestif 的约束重叠
     - cyclop # 圈复杂度检查；与 gocyclo 重复
     - depguard # 导入允许和禁止列表，需按项目边界配置
     - goheader # 文件头检查，需按项目策略配置
     - importas # 导入别名检查，需按项目约定配置
-    - funcorder # 函数排列顺序检查，不作为默认约束
     - godoclint # godoc 检查；与 godot、revive 的约束重叠
     - varnamelen # 变量名长度检查；Go 允许在短作用域内使用短名称
     - exhaustruct # 强制初始化全部结构体字段，不利于使用零值
@@ -118,18 +119,34 @@ linters:
       threshold: 100 # 按词法单元数量计，数值越小越严格
     errcheck:
       check-type-assertions: true
+    funcorder:
+      # 约束构造函数位置，其余函数与方法按职责排列。
+      constructor: true
+      struct-method: false
+      alphabetical: false
+      function: false
     funlen:
       lines: 120
       statements: 80
     goconst:
       min-len: 3
       min-occurrences: 4
+    gocognit:
+      min-complexity: 15 # 关注阅读负担，与圈复杂度互补
     gocyclo:
       min-complexity: 13 # 数值越小，对复杂度的限制越严格
-    wsl_v5:
-      allow-first-in-block: true
-      allow-whole-block: false
-      branch-max-lines: 2
+    mnd:
+      # 沿用 Kratos 的检查范围。
+      checks:
+        - case
+        - condition
+        - return
+    revive:
+      # 保留默认规则，额外约束主流程的嵌套。
+      enable-default-rules: true
+      rules:
+        - name: early-return
+          arguments: [preserve-scope]
 
 formatters:
   # 格式工具按列表启用；未启用项保留为注释，并说明原因。

@@ -11,7 +11,8 @@ init: ## 安装开发工具
 	go install github.com/bufbuild/buf/cmd/buf@v1.74.0
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 
-api: ## 生成 Protobuf、gRPC、HTTP 代码和 OpenAPI 文档
+api: ## 格式化 proto 并生成 Protobuf、gRPC、HTTP 代码和 OpenAPI 文档
+	# $(BUF) format -w
 	$(BUF) generate --template buf.gen.yaml
 
 generate: ## 生成代码并整理共享 module 的依赖

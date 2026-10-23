@@ -108,7 +108,7 @@ go test ./protocol -run '^$' -fuzz FuzzWebSocket -fuzztime 5s
 
 ```sh
 make init       # 安装 Wire、Buf 和 golangci-lint
-make api        # 生成 Protobuf、gRPC、HTTP 代码和 openapi.yaml
+make api        # 格式化 proto 并生成 Go 代码和 openapi.yaml
 make generate   # 执行 go generate 并整理依赖
 make all        # 依次执行 api、generate
 make build      # 编译全部包；有服务入口后，将可执行文件输出到 bin/
@@ -117,19 +117,27 @@ make help       # 查看所有目标
 ```
 
 `api/helloworld/v1/hello.proto` 只定义 `GreeterService.SayHello`，HTTP 路径为 `GET /v1/hello/{name}`。
+`make api` 先执行 `buf format -w` 格式化 proto，再按 `buf.gen.yaml` 生成代码和 OpenAPI 文档。
 生成方式沿用 `kratos-layout` 的 Buf 配置，插件版本固定在 `buf.gen.yaml`，通过 `go run` 调用。
 Go 依赖版本参考该模板；工具安装可由 Go 自动下载所需工具链。
 
 ## Lint
 
-以 `golang-lint` 技能的标准模板为基线，启用其中 47 个 linter，保留其阈值及 `gofumpt` / `goimports` 格式配置。项目适配包括：
+以 `golang-lint` 技能的标准模板为基线，按项目需要配置检查项与阈值。项目适配包括：
 
 - 显式启用规则，避免工具升级时默认集合变化。
+- 沿用 Kratos 启用 `dogsled`、`prealloc` 和 `mnd`；`mnd` 只检查 `case`、条件和返回值，数字常量按实际含义命名。
+- 同时检查圈复杂度（`gocyclo`，阈值 13）和认知复杂度（`gocognit`，阈值 15），约束分支路径及嵌套带来的阅读负担；手写代码和测试均参与检查。
+- 保留 `revive` 默认规则，增加 `early-return`，提示提前结束失败分支；使用 `preserve-scope` 避免扩大变量作用域。
+- 启用 `funcorder.constructor`，要求构造函数位于类型声明之后、方法之前；其余函数与方法按职责排列。
+- 空行按业务阶段划分，关闭 `wsl_v5` 的强制分隔；保留 `whitespace` 检查块首尾多余空行。
 - 使用 `gci` 将导入按标准库、项目包、第三方包排序，组间留空行；项目包根据根目录 module 自动识别。
 - 移除 `nolintlint` 及其抑制注释格式要求；[AGENTS.md](AGENTS.md) 规定手写 Go 代码禁止使用 `//nolint`。
 - 将已弃用的 `gofumpt.extra-rules` 改为等价的 `extra.group-params` 与 `extra.clothe-returns`，写法见 [格式工具文档](https://golangci-lint.run/docs/formatters/configuration/#gofumpt)。
-- 按标准生成标记排除 Protobuf、Wire、Ent 产物；手写代码、测试、schema、examples 和 testutils 仍在检查范围内。
+- Lint 和格式化均使用 `generated: strict`，按标准生成标记排除 Protobuf、Wire、Ent 产物；手写代码、测试、schema、examples 和 testutils 仍在检查范围内。
 - 仅按目录排除 `vendor` 和 `third_party`，检查时以只读模式处理根 module 依赖。
+
+Lint 的生成文件排除只过滤诊断，不跳过依赖加载和类型检查；生成代码的编译错误仍会报告。
 
 配置语法及生成文件识别方式见 [golangci-lint 官方文档](https://golangci-lint.run/docs/configuration/file/)。
 
