@@ -38,11 +38,9 @@ func (c *connection) admit(m protocol.Message) (*internalv1.Session, bool, error
 		if !login {
 			return nil, false, kerrors.Unauthorized("UNAUTHENTICATED", "login required")
 		}
-
 		if c.login {
 			return nil, false, fault.Overloaded()
 		}
-
 		if !time.Now().Before(c.authDeadline) {
 			return nil, false, fault.Normalize(context.DeadlineExceeded)
 		}
@@ -69,7 +67,6 @@ func (c *connection) dispatch(ctx context.Context, m protocol.Message) {
 		c.reject(m, err)
 		return
 	}
-
 	c.workers.Go(func() {
 		defer func() {
 			<-c.slots
@@ -118,8 +115,8 @@ func (c *connection) forward(ctx context.Context, m protocol.Message, s *interna
 	})
 	reply, _ := value.(*internalv1.ForwardReply)
 
-	if ctx.Err() != nil {
-		err = ctx.Err()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		err = ctxErr
 	}
 
 	if err != nil {
@@ -131,14 +128,18 @@ func (c *connection) forward(ctx context.Context, m protocol.Message, s *interna
 		c.reject(m, kerrors.InternalServer("INVALID_RESULT", "Node returned no result"))
 		return
 	}
-
 	if login && !c.bind(ctx, reply.AuthenticatedUser) {
 		c.reject(m, kerrors.Unauthorized("AUTHENTICATION_FAILED", "login is no longer valid"))
 		return
 	}
 
 	if m.Type == protocol.Request {
-		c.enqueue(protocol.Message{Type: protocol.Response, Route: m.Route, RequestID: m.RequestID, Payload: reply.Payload})
+		c.enqueue(protocol.Message{
+			Type:      protocol.Response,
+			Route:     m.Route,
+			RequestID: m.RequestID,
+			Payload:   reply.Payload,
+		})
 	}
 }
 
@@ -167,6 +168,7 @@ func (c *connection) selectNode(ctx context.Context) (Backend, error) {
 	c.mu.Lock()
 	c.backend = backend
 	c.mu.Unlock()
+
 	// 监控使用连接生命周期，由 run 负责等待。
 	c.workers.Go(func() {
 		select {
@@ -183,12 +185,12 @@ func (c *connection) bind(ctx context.Context, user string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.closed || c.session != nil || !c.login || user == "" || ctx.Err() != nil || !time.Now().Before(c.authDeadline) {
+	if c.closed || c.session != nil || !c.login || user == "" ||
+		ctx.Err() != nil || !time.Now().Before(c.authDeadline) {
 		return false
 	}
 
 	c.session = &internalv1.Session{Id: uuid.NewString(), UserId: user}
-
 	return true
 }
 
@@ -199,7 +201,6 @@ func (c *connection) reject(m protocol.Message, err error) {
 	}
 
 	failure := fault.Normalize(err)
-
 	encoding, codecErr := codec.Lookup(c.entry.Codec)
 	if codecErr != nil {
 		c.close()

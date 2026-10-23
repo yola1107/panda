@@ -9,7 +9,6 @@ import (
 
 	internalv1 "github.com/yola1107/panda/api/panda/transport/v1"
 	"github.com/yola1107/panda/codec"
-	"github.com/yola1107/panda/internal/fault"
 	"github.com/yola1107/panda/protocol"
 
 	"github.com/go-kratos/kratos/v3/middleware"
@@ -44,17 +43,19 @@ type service struct {
 
 // Node 可交给 kratos.App 管理；注册必须在处理首个请求之前完成。
 type Node struct {
-	stopped chan struct{}
-	pusher  Pusher
 	internalv1.UnimplementedNodeServer
-	mu         sync.RWMutex
-	services   map[string]service
-	started    bool
-	slots      chan struct{}
-	done       chan struct{}
-	once       sync.Once
-	workers    sync.WaitGroup
 	middleware middleware.Middleware
+
+	mu       sync.RWMutex
+	services map[string]service
+	pusher   Pusher
+	started  bool
+
+	slots   chan struct{}
+	done    chan struct{}
+	stopped chan struct{}
+	once    sync.Once
+	workers sync.WaitGroup
 }
 
 // New 创建有界执行器；零上限使用 256，负值无效。
@@ -103,7 +104,6 @@ func (n *Node) Register(name string, codecs []string, routes ...Route) error {
 	}
 
 	logins := 0
-
 	for _, route := range routes {
 		if err := addRoute(&s, route); err != nil {
 			return err
@@ -119,7 +119,6 @@ func (n *Node) Register(name string, codecs []string, routes ...Route) error {
 	}
 
 	n.services[name] = s
-
 	return nil
 }
 
@@ -127,25 +126,20 @@ func addRoute(s *service, route Route) error {
 	if route.Number == 0 {
 		return errors.New("route zero is reserved")
 	}
-
 	if _, ok := s.routes[route.Number]; ok {
 		return fmt.Errorf("duplicate route %d", route.Number)
 	}
-
 	if route.Type != protocol.Request && route.Type != protocol.Notify && route.Type != protocol.Push {
 		return errors.New("invalid route type")
 	}
-
 	if route.Login && route.Type != protocol.Request {
 		return errors.New("login must be a request")
 	}
-
 	if route.Type != protocol.Push && (route.New == nil || route.Handle == nil) {
 		return errors.New("route requires a message factory and Handler")
 	}
 
 	s.routes[route.Number] = route
-
 	return nil
 }
 
@@ -185,66 +179,3 @@ func (n *Node) Stop(ctx context.Context) error {
 
 // Done 在 Node 停止时关闭，Gate 据此断开绑定会话。
 func (n *Node) Done() <-chan struct{} { return n.done }
-
-// Forward 对本地与 RPC 转交执行相同的验证、中间件和期限处理。
-func (n *Node) Forward(ctx context.Context, req *internalv1.ForwardRequest) (*internalv1.ForwardReply, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fault.Normalize(err)
-	}
-
-	route, err := n.resolve(req)
-	if err != nil {
-		return nil, err
-	}
-
-	n.mu.Lock()
-	select {
-	case <-n.done:
-		n.mu.Unlock()
-		return nil, fault.Closed()
-	default:
-	}
-
-	select {
-	case n.slots <- struct{}{}:
-	default:
-		n.mu.Unlock()
-		return nil, fault.Overloaded()
-	}
-
-	n.workers.Add(1)
-	n.mu.Unlock()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	type outcome struct {
-		reply *internalv1.ForwardReply
-		err   error
-	}
-
-	finished := make(chan outcome, 1)
-
-	go func() {
-		defer n.workers.Done()
-		defer func() {
-			<-n.slots
-		}()
-
-		reply, err := n.execute(ctx, req, route)
-		finished <- outcome{reply, err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, fault.Normalize(ctx.Err())
-	case <-n.done:
-		return nil, fault.Closed()
-	case result := <-finished:
-		if err := ctx.Err(); err != nil {
-			return nil, fault.Normalize(err)
-		}
-
-		return result.reply, result.err
-	}
-}

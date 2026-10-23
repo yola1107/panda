@@ -17,7 +17,7 @@ import (
 	"github.com/go-kratos/kratos/contrib/otel/v3/tracing"
 	kerrors "github.com/go-kratos/kratos/v3/errors"
 	"github.com/go-kratos/kratos/v3/middleware"
-	"github.com/go-kratos/kratos/v3/registry"
+	"github.com/go-kratos/kratos/v3/transport"
 	kgrpc "github.com/go-kratos/kratos/v3/transport/grpc"
 )
 
@@ -39,13 +39,12 @@ func matrix(t *testing.T, test func(*testing.T, deployment)) {
 	t.Helper()
 
 	for _, separated := range []bool{false, true} {
+		mode := "combined"
+		if separated {
+			mode = "separated"
+		}
 		for _, network := range []string{tcpNetwork, wsNetwork} {
 			for _, codec := range []string{protoCodec, jsonCodec} {
-				mode := "combined"
-				if separated {
-					mode = "separated"
-				}
-
 				t.Run(mode+"/"+network+"/"+codec, func(t *testing.T) {
 					t.Parallel()
 					test(t, deployment{network: network, codec: codec, separated: separated})
@@ -130,7 +129,6 @@ func start(t *testing.T, mode deployment, opts settings) *harness {
 	})
 
 	result := &harness{node: n, mode: mode}
-
 	selector := gate.Local(n)
 	if mode.separated {
 		selector = result.remoteNodes(t, opts.rpcOptions)
@@ -150,6 +148,7 @@ func start(t *testing.T, mode deployment, opts settings) *harness {
 		other.Path = "/other"
 		entries = append(entries, other)
 	}
+
 	g, err := gate.New(gate.Config{ID: t.Name(), Entries: entries}, gate.WithSelector(selector))
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +162,6 @@ func start(t *testing.T, mode deployment, opts settings) *harness {
 	}
 
 	runGate(t, g)
-
 	return result
 }
 
@@ -188,7 +186,6 @@ func (h *harness) remoteNodes(t *testing.T, options []kgrpc.ClientOption) gate.S
 	}
 
 	t.Cleanup(nodes.Close)
-
 	return nodes
 }
 
@@ -199,7 +196,7 @@ func (h *harness) remotePush(t *testing.T) {
 	internalv1.RegisterGateServer(rpc, h.gate)
 	address := runRPC(t, rpc)
 	pusher, err := remote.NewPusher(staticdiscovery.Discovery{
-		remote.GateService: {&registry.ServiceInstance{
+		remote.GateService: {{
 			ID:        t.Name(),
 			Name:      remote.GateService,
 			Endpoints: []string{address},
@@ -219,53 +216,40 @@ func runRPC(t *testing.T, rpc *kgrpc.Server) string {
 		t.Fatal(err)
 	}
 
-	done := make(chan error, 1)
-	go func() {
-		done <- rpc.Start(t.Context())
-	}()
-
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-		defer cancel()
-
-		if err := rpc.Stop(ctx); err != nil {
-			t.Error(err)
-		}
-
-		if err := <-done; err != nil {
-			t.Error(err)
-		}
-	})
-
+	runServer(t, rpc)
 	return endpoint.String()
 }
 
 func runGate(t *testing.T, g *gate.Gate) {
 	t.Helper()
 
+	runServer(t, g)
+	select {
+	case <-g.Ready():
+	case <-time.After(testTimeout):
+		t.Fatal("Gate startup timeout")
+	}
+}
+
+func runServer(t *testing.T, server transport.Server) {
+	t.Helper()
+
 	done := make(chan error, 1)
 	go func() {
-		done <- g.Start(t.Context())
+		done <- server.Start(t.Context())
 	}()
 
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 		defer cancel()
 
-		if err := g.Stop(ctx); err != nil {
+		if err := server.Stop(ctx); err != nil {
 			t.Error(err)
 		}
-
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
 	})
-
-	select {
-	case <-g.Ready():
-	case <-time.After(testTimeout):
-		t.Fatal("Gate startup timeout")
-	}
 }
 
 func (h *harness) dial(t *testing.T) (*client.Client, *echov1.EchoPandaClient) {
@@ -281,7 +265,6 @@ func (h *harness) dial(t *testing.T) (*client.Client, *echov1.EchoPandaClient) {
 	}
 
 	t.Cleanup(c.Close)
-
 	return c, echov1.NewEchoPandaClient(c)
 }
 
@@ -315,6 +298,5 @@ func receive[T any](t *testing.T, values <-chan T) T {
 	}
 
 	var zero T
-
 	return zero
 }

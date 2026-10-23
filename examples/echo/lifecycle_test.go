@@ -15,19 +15,24 @@ import (
 
 func TestGateStopCancelsHandlers(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		entered, exited := make(chan struct{}, 4), make(chan struct{}, 4)
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
-				entered <- struct{}{}
-				<-ctx.Done()
-				exited <- struct{}{}
-				return nil, ctx.Err()
-			}
-		}})
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
+					entered <- struct{}{}
+					<-ctx.Done()
+					exited <- struct{}{}
+					return nil, ctx.Err()
+				}
+			},
+		})
 		c, api := h.dial(t)
 		login(t, api)
+
 		results := make(chan error, 4)
 		for range 4 {
 			go func() {
@@ -38,6 +43,7 @@ func TestGateStopCancelsHandlers(t *testing.T) {
 		for range 4 {
 			receive(t, entered)
 		}
+
 		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
 		if err := h.gate.Stop(ctx); err != nil {
@@ -55,19 +61,24 @@ func TestGateStopCancelsHandlers(t *testing.T) {
 
 func TestDisconnectedLogin(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
-		entered, canceled, release, exited := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.login = func(ctx context.Context, _ *echov1.LoginRequest) (*echov1.LoginReply, string, error) {
-				close(entered)
-				<-ctx.Done()
-				close(canceled)
-				<-release
-				close(exited)
-				return &echov1.LoginReply{}, "late", nil
-			}
-		}})
+
+		entered, canceled := make(chan struct{}), make(chan struct{})
+		release, exited := make(chan struct{}), make(chan struct{})
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.login = func(ctx context.Context, _ *echov1.LoginRequest) (*echov1.LoginReply, string, error) {
+					close(entered)
+					<-ctx.Done()
+					close(canceled)
+					<-release
+					close(exited)
+					return &echov1.LoginReply{}, "late", nil
+				}
+			},
+		})
 		t.Cleanup(func() {
 			select {
 			case <-release:
@@ -76,12 +87,14 @@ func TestDisconnectedLogin(t *testing.T) {
 			}
 		})
 		c, api := h.dial(t)
+
 		result := make(chan error, 1)
 		go func() {
 			_, err := api.Login(t.Context(), &echov1.LoginRequest{})
 			result <- err
 		}()
 		receive(t, entered)
+
 		c.Close()
 		receive(t, canceled)
 		close(release)
@@ -94,8 +107,10 @@ func TestDisconnectedLogin(t *testing.T) {
 
 func TestCanceledHandlerDoesNotStart(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		var calls atomic.Int32
 		passed := make(chan struct{}, 1)
 		delay := func(next middleware.Handler) middleware.Handler {
@@ -121,6 +136,7 @@ func TestCanceledHandlerDoesNotStart(t *testing.T) {
 		})
 		_, api := h.dial(t)
 		login(t, api)
+
 		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
 		_, err := api.Say(ctx, &echov1.SayRequest{})
@@ -134,15 +150,19 @@ func TestCanceledHandlerDoesNotStart(t *testing.T) {
 
 func TestNotifyHasNoResponse(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		handled := make(chan struct{}, 1)
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.report = func(context.Context, *echov1.ReportRequest) error {
-				handled <- struct{}{}
-				return nil
-			}
-		}})
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.report = func(context.Context, *echov1.ReportRequest) error {
+					handled <- struct{}{}
+					return nil
+				}
+			},
+		})
 		wire := rawDial(t, h)
 		rawSend(t, wire, mode.codec, protocol.Message{
 			Type:      protocol.Request,
@@ -152,8 +172,10 @@ func TestNotifyHasNoResponse(t *testing.T) {
 		if _, err := wire.Read(protocol.DefaultMaxSize, time.Now().Add(testTimeout)); err != nil {
 			t.Fatal(err)
 		}
+
 		rawSend(t, wire, mode.codec, protocol.Message{Type: protocol.Notify, Route: echov1.EchoReportRoute}, &echov1.ReportRequest{})
 		receive(t, handled)
+
 		data, err := protocol.Encode(protocol.Message{Type: protocol.Heartbeat}, protocol.DefaultMaxSize)
 		if err != nil {
 			t.Fatal(err)

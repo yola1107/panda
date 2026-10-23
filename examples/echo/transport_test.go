@@ -23,8 +23,10 @@ import (
 
 func TestAuthenticationTimeout(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{entry: gate.Entry{AuthTimeout: 150 * time.Millisecond}})
 		c, _ := h.dial(t)
 
@@ -49,8 +51,10 @@ func TestAuthenticationTimeout(t *testing.T) {
 
 func TestIdleTimeout(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{entry: gate.Entry{IdleTimeout: 200 * time.Millisecond}})
 		c, api := h.dial(t)
 		login(t, api)
@@ -60,6 +64,7 @@ func TestIdleTimeout(t *testing.T) {
 
 func TestUnsupportedCodec(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
@@ -81,8 +86,10 @@ func TestUnsupportedCodec(t *testing.T) {
 
 func TestOversizedFrame(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{entry: gate.Entry{MaxSize: 128}})
 		wire := rawDial(t, h)
 
@@ -115,7 +122,6 @@ func rawDial(t *testing.T, h *harness) *transportio.Connection {
 	}
 
 	t.Cleanup(func() { _ = wire.Close() })
-
 	return wire
 }
 
@@ -144,18 +150,21 @@ func rawSend(t *testing.T, wire *transportio.Connection, codecName string, m pro
 
 func TestSlowClient(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
 		sessions := make(chan session.Session, 1)
-		h := start(t, mode, settings{entry: gate.Entry{SendQueue: 1}, customize: func(h *handler) {
-			h.report = func(ctx context.Context, _ *echov1.ReportRequest) error {
-				s, _ := session.FromContext(ctx)
-				sessions <- s
-
-				return nil
-			}
-		}})
+		h := start(t, mode, settings{
+			entry: gate.Entry{SendQueue: 1},
+			customize: func(h *handler) {
+				h.report = func(ctx context.Context, _ *echov1.ReportRequest) error {
+					s, _ := session.FromContext(ctx)
+					sessions <- s
+					return nil
+				}
+			},
+		})
 		wire := rawDial(t, h)
 		rawSend(t, wire, mode.codec, protocol.Message{
 			Type:      protocol.Request,
@@ -187,8 +196,10 @@ func TestSlowClient(t *testing.T) {
 
 func TestNodeOffline(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{})
 		c, api := h.dial(t)
 		login(t, api)
@@ -248,8 +259,10 @@ func drainClosed(t *testing.T, wire *transportio.Connection) {
 
 func TestIdleRPCPreservesSession(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		if !mode.separated {
 			t.Skip("RPC idle applies to separated deployment")
 		}
@@ -258,11 +271,13 @@ func TestIdleRPCPreservesSession(t *testing.T) {
 		})
 		c, api := h.dial(t)
 		login(t, api)
+
 		select {
 		case <-c.Done():
 			t.Fatal("healthy idle Node disconnected session")
 		case <-time.After(300 * time.Millisecond):
 		}
+
 		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
 		if _, err := api.Say(ctx, &echov1.SayRequest{Text: "still bound"}); err != nil {
@@ -273,8 +288,10 @@ func TestIdleRPCPreservesSession(t *testing.T) {
 
 func TestWebSocketTextRejected(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		if mode.network != wsNetwork {
 			t.Skip("text frames only exist in WebSocket")
 		}
@@ -291,6 +308,7 @@ func TestWebSocketTextRejected(t *testing.T) {
 		if err == nil {
 			t.Fatal("text frame accepted")
 		}
+
 		var timeout net.Error
 		if errors.As(err, &timeout) && timeout.Timeout() {
 			t.Fatal("text frame did not close connection")
@@ -300,6 +318,7 @@ func TestWebSocketTextRejected(t *testing.T) {
 
 func dialWebSocket(t *testing.T, h *harness) *websocket.Conn {
 	t.Helper()
+
 	conn, response, err := websocket.DefaultDialer.DialContext(t.Context(), h.gate.Addresses()[0], nil)
 	if response != nil && response.Body != nil {
 		_ = response.Body.Close()

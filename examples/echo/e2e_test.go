@@ -14,8 +14,10 @@ import (
 
 func TestInteractions(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{entry: gate.Entry{MaxInFlight: 64}})
 		c, api := h.dial(t)
 
@@ -28,17 +30,16 @@ func TestInteractions(t *testing.T) {
 		reason(t, err, "INVALID_TOKEN")
 		_, err = api.Say(ctx, &echov1.SayRequest{})
 		reason(t, err, "UNAUTHENTICATED")
+
 		login(t, api)
 		checkConcurrentRequests(t, api)
 		_, err = api.Say(ctx, &echov1.SayRequest{Text: "error"})
 		reason(t, err, "DEMO_ERROR")
-
 		if kerrors.FromError(err).Metadata["field"] != "text" {
 			t.Fatal("error metadata lost")
 		}
 
 		updates := make(chan string, 1)
-
 		api.OnUpdate(func(_ context.Context, update *echov1.Update) error {
 			updates <- update.Text
 			return nil
@@ -68,7 +69,6 @@ func checkConcurrentRequests(t *testing.T, api *echov1.EchoPandaClient) {
 			defer cancel()
 
 			text := strconv.Itoa(i)
-
 			reply, err := api.Say(ctx, &echov1.SayRequest{Text: text})
 			if err != nil {
 				t.Error(err)

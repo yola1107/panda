@@ -27,7 +27,6 @@ func (c *Client) Decode(payload []byte, message proto.Message) error {
 }
 
 func (c *Client) dispatch(ctx context.Context) {
-	defer close(c.pushDone)
 	defer c.shutdown()
 
 	for {
@@ -39,10 +38,11 @@ func (c *Client) dispatch(ctx context.Context) {
 			callback := c.callbacks[message.Route]
 			c.mu.Unlock()
 
-			if callback != nil {
-				if err := callback(ctx, message.Payload); err != nil {
-					return
-				}
+			if callback == nil {
+				continue
+			}
+			if err := callback(ctx, message.Payload); err != nil {
+				return
 			}
 		}
 	}

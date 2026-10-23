@@ -17,18 +17,23 @@ import (
 
 func TestTrustedContext(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.login = func(ctx context.Context, req *echov1.LoginRequest) (*echov1.LoginReply, string, error) {
-				_, authenticated := session.FromContext(ctx)
-				c, ok := session.ConnectionFromContext(ctx)
-				if authenticated || !ok || c.GateID != t.Name() || c.ID == "" || c.Service != echov1.EchoService || c.Codec != mode.codec {
-					return nil, "", kerrors.InternalServer("INVALID_CONTEXT", "untrusted login context")
+
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.login = func(ctx context.Context, req *echov1.LoginRequest) (*echov1.LoginReply, string, error) {
+					_, authenticated := session.FromContext(ctx)
+					c, ok := session.ConnectionFromContext(ctx)
+					if authenticated || !ok || c.GateID != t.Name() || c.ID == "" ||
+						c.Service != echov1.EchoService || c.Codec != mode.codec {
+						return nil, "", kerrors.InternalServer("INVALID_CONTEXT", "untrusted login context")
+					}
+					return h.base.Login(ctx, req)
 				}
-				return h.base.Login(ctx, req)
-			}
-		}})
+			},
+		})
 		_, api := h.dial(t)
 		login(t, api)
 	})
@@ -36,20 +41,25 @@ func TestTrustedContext(t *testing.T) {
 
 func TestSessionPushIsolation(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		sessions := make(chan session.Session, 1)
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.report = func(ctx context.Context, _ *echov1.ReportRequest) error {
-				s, _ := session.FromContext(ctx)
-				sessions <- s
-				return nil
-			}
-		}})
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.report = func(ctx context.Context, _ *echov1.ReportRequest) error {
+					s, _ := session.FromContext(ctx)
+					sessions <- s
+					return nil
+				}
+			},
+		})
 		c, first := h.dial(t)
 		_, second := h.dial(t)
 		login(t, first)
 		login(t, second)
+
 		updates := make(chan string, 2)
 		first.OnUpdate(func(_ context.Context, message *echov1.Update) error {
 			updates <- "first:" + message.Text
@@ -59,6 +69,7 @@ func TestSessionPushIsolation(t *testing.T) {
 			updates <- "second:" + message.Text
 			return nil
 		})
+
 		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
 		if err := first.Report(ctx, &echov1.ReportRequest{}); err != nil {
@@ -71,6 +82,7 @@ func TestSessionPushIsolation(t *testing.T) {
 		if got := receive(t, updates); got != "first:event" {
 			t.Fatal(got)
 		}
+
 		c.Close()
 		waitSessionClosed(ctx, t, h, target)
 		if _, err := second.Say(ctx, &echov1.SayRequest{Text: "alive"}); err != nil {
@@ -86,6 +98,7 @@ func TestSessionPushIsolation(t *testing.T) {
 
 func waitSessionClosed(ctx context.Context, t *testing.T, h *harness, target session.Session) {
 	t.Helper()
+
 	for {
 		err := echov1.PushEchoUpdate(ctx, h.node, target, &echov1.Update{Text: "closed"})
 		if err != nil {
@@ -104,8 +117,10 @@ func waitSessionClosed(ctx context.Context, t *testing.T, h *harness, target ses
 
 func TestDualCodecEntries(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{dualCodec: true})
 		_, first := h.dial(t)
 		second := dialOtherCodec(t, h)
@@ -122,11 +137,16 @@ func TestDualCodecEntries(t *testing.T) {
 
 func dialOtherCodec(t *testing.T, h *harness) *echov1.EchoPandaClient {
 	t.Helper()
+
 	codec := jsonCodec
 	if h.mode.codec == jsonCodec {
 		codec = protoCodec
 	}
-	c, err := client.Dial(t.Context(), client.Config{Network: h.mode.network, Address: h.gate.Addresses()[1], Codec: codec})
+	c, err := client.Dial(t.Context(), client.Config{
+		Network: h.mode.network,
+		Address: h.gate.Addresses()[1],
+		Codec:   codec,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,6 +156,7 @@ func dialOtherCodec(t *testing.T, h *harness) *echov1.EchoPandaClient {
 
 func assertSharedPort(t *testing.T, addresses []string) {
 	t.Helper()
+
 	first, err := url.Parse(addresses[0])
 	if err != nil {
 		t.Fatal(err)
@@ -151,14 +172,17 @@ func assertSharedPort(t *testing.T, addresses []string) {
 
 func checkCodecInteractions(t *testing.T, api *echov1.EchoPandaClient, text string) {
 	t.Helper()
+
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
+
 	reply, err := api.Say(ctx, &echov1.SayRequest{Text: text})
 	if err != nil || reply.GetText() != text {
 		t.Fatalf("codec request: %v %v", reply, err)
 	}
 	_, err = api.Say(ctx, &echov1.SayRequest{Text: "error"})
 	reason(t, err, "DEMO_ERROR")
+
 	updates := make(chan string, 1)
 	api.OnUpdate(func(_ context.Context, update *echov1.Update) error {
 		updates <- update.Text
@@ -174,22 +198,27 @@ func checkCodecInteractions(t *testing.T, api *echov1.EchoPandaClient, text stri
 
 func TestKeepAlive(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{entry: gate.Entry{IdleTimeout: 200 * time.Millisecond}})
 		c, api := h.dial(t)
 		login(t, api)
+
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		finished := make(chan error, 1)
 		go func() {
 			finished <- c.KeepAlive(ctx, 30*time.Millisecond)
 		}()
+
 		select {
 		case <-c.Done():
 			t.Fatal("heartbeats did not keep connection alive")
 		case <-time.After(500 * time.Millisecond):
 		}
+
 		cancel()
 		if err := receive(t, finished); err == nil {
 			t.Fatal("KeepAlive ignored cancellation")
@@ -199,11 +228,14 @@ func TestKeepAlive(t *testing.T) {
 
 func TestCanceledHeartbeatBeforeSend(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
+
 		h := start(t, mode, settings{})
 		c, api := h.dial(t)
 		login(t, api)
+
 		canceled, cancel := context.WithCancel(t.Context())
 		cancel()
 		for range 32 {
@@ -211,6 +243,7 @@ func TestCanceledHeartbeatBeforeSend(t *testing.T) {
 				t.Fatalf("canceled heartbeat: %v", err)
 			}
 		}
+
 		ctx, stop := context.WithTimeout(t.Context(), testTimeout)
 		defer stop()
 		if err := c.Heartbeat(ctx); err != nil {

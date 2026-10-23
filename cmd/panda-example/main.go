@@ -27,7 +27,6 @@ func main() {
 	mode := flag.String("mode", "combined", "combined、gate、node 或 client")
 	path := flag.String("config", "examples/echo/config.yaml", "配置文件")
 	entry := flag.Int("entry", 0, "客户端选择的入口索引")
-
 	flag.Parse()
 
 	if err := run(*mode, *path, *entry); err != nil {
@@ -59,7 +58,6 @@ func run(mode, path string, entry int) error {
 	}
 
 	var servers []transport.Server
-
 	switch mode {
 	case "combined":
 		g, err := gate.New(conf.Gate, gate.WithSelector(gate.Local(n)))
@@ -110,7 +108,6 @@ func demonstrate(ctx context.Context, conf echo.Config, index int) error {
 	}
 
 	e := conf.Gate.Entries[index]
-
 	address := e.Address
 	if e.Network == "websocket" {
 		address = "ws://" + address + e.Path
@@ -119,7 +116,12 @@ func demonstrate(ctx context.Context, conf echo.Config, index int) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	c, err := client.Dial(ctx, client.Config{Network: e.Network, Address: address, Codec: e.Codec, MaxSize: e.MaxSize})
+	c, err := client.Dial(ctx, client.Config{
+		Network: e.Network,
+		Address: address,
+		Codec:   e.Codec,
+		MaxSize: e.MaxSize,
+	})
 	if err != nil {
 		return err
 	}
@@ -127,7 +129,6 @@ func demonstrate(ctx context.Context, conf echo.Config, index int) error {
 
 	api := echov1.NewEchoPandaClient(c)
 	updates := make(chan *echov1.Update, 1)
-
 	api.OnUpdate(func(_ context.Context, message *echov1.Update) error {
 		updates <- message
 		return nil
@@ -137,14 +138,12 @@ func demonstrate(ctx context.Context, conf echo.Config, index int) error {
 	if err != nil {
 		return err
 	}
-
 	slog.Info("登录成功", "greeting", login.Greeting)
 
 	reply, err := api.Say(ctx, &echov1.SayRequest{Text: "你好，Panda"})
 	if err != nil {
 		return err
 	}
-
 	slog.Info("收到应答", "text", reply.Text, "user", reply.UserId)
 
 	if err := api.Report(ctx, &echov1.ReportRequest{Text: "业务已处理通知"}); err != nil {

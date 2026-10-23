@@ -62,13 +62,16 @@ func TestPushOwnership(t *testing.T) {
 
 func TestGeneratedNameCollision(t *testing.T) {
 	t.Parallel()
+
 	for _, name := range []string{"PushEvent", "OnEvent"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			request := fixture()
 			file := request.ProtoFile[1]
 			file.Service[0].Method[1].Name = new(name)
 			file.MessageType = []*descriptorpb.DescriptorProto{pushMessage("Event", fixtureService, 3)}
+
 			plugin, err := (protogen.Options{}).New(request)
 			if err != nil {
 				t.Fatal(err)

@@ -7,7 +7,6 @@ import (
 	"maps"
 	"net/url"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 
@@ -26,17 +25,19 @@ import (
 
 // Nodes 按服务发现快照选择 Node，并监控实例移除和 RPC 断连。
 type Nodes struct {
+	watchers []registry.Watcher
+	options  []kgrpc.ClientOption
+
 	mu       sync.Mutex
 	services map[string]map[string]string
 	ready    map[string]chan struct{}
 	backends map[string]*backend
-	watchers []registry.Watcher
-	options  []kgrpc.ClientOption
-	cancel   context.CancelFunc
-	done     chan struct{}
-	workers  sync.WaitGroup
 	stopped  bool
 	next     uint64
+
+	cancel  context.CancelFunc
+	done    chan struct{}
+	workers sync.WaitGroup
 }
 
 // NewNodes 监听给定逻辑服务。ctx 属于组件生命周期，Close 负责取消并等待。
@@ -54,8 +55,8 @@ func NewNodes(ctx context.Context, discovery registry.Discovery, services []stri
 		cancel:   cancel,
 		done:     make(chan struct{}),
 	}
-	var jobs []func()
 
+	var jobs []func()
 	for _, service := range services {
 		if _, ok := n.ready[service]; ok {
 			continue
@@ -107,12 +108,7 @@ func (n *Nodes) Select(ctx context.Context, service string) (gate.Backend, error
 	}
 
 	instances := n.services[service]
-	ids := make([]string, 0, len(instances))
-	for id := range instances {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
+	ids := slices.Sorted(maps.Keys(instances))
 	if len(ids) == 0 {
 		return nil, kerrors.ServiceUnavailable("NO_NODE", "no Node instance available")
 	}
@@ -145,15 +141,14 @@ func (n *Nodes) Close() {
 	}
 
 	n.cancel()
-
 	for _, watcher := range n.watchers {
 		_ = watcher.Stop()
 	}
-
 	for _, b := range n.backends {
 		b.close()
 	}
 	n.mu.Unlock()
+
 	n.workers.Wait()
 }
 
@@ -180,7 +175,6 @@ func (n *Nodes) watch(service string, watcher registry.Watcher) {
 
 func (n *Nodes) update(service string, instances []*registry.ServiceInstance) {
 	addresses := make(map[string]string)
-
 	for _, instance := range instances {
 		if instance == nil || instance.ID == "" {
 			continue
@@ -192,12 +186,14 @@ func (n *Nodes) update(service string, instances []*registry.ServiceInstance) {
 	}
 
 	for id, oldAddress := range n.services[service] {
-		if addresses[id] != oldAddress {
-			key := service + "/" + id
-			if b := n.backends[key]; b != nil {
-				b.close()
-				delete(n.backends, key)
-			}
+		if addresses[id] == oldAddress {
+			continue
+		}
+
+		key := service + "/" + id
+		if b := n.backends[key]; b != nil {
+			b.close()
+			delete(n.backends, key)
 		}
 	}
 
@@ -243,6 +239,7 @@ func (n *Nodes) checkConnections(ctx context.Context) {
 	n.mu.Lock()
 	backends := maps.Clone(n.backends)
 	n.mu.Unlock()
+
 	for key, b := range backends {
 		if b.conn.GetState() == connectivity.Ready {
 			b.ready.Store(true)
@@ -251,6 +248,7 @@ func (n *Nodes) checkConnections(ctx context.Context) {
 		if !b.ready.Load() || healthy(ctx, b.conn) {
 			continue
 		}
+
 		n.mu.Lock()
 		if n.backends[key] == b {
 			b.close()
@@ -265,6 +263,7 @@ func healthy(ctx context.Context, conn *grpc.ClientConn) bool {
 	conn.Connect()
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
+
 	reply, err := grpc_health_v1.NewHealthClient(conn).Check(
 		ctx,
 		&grpc_health_v1.HealthCheckRequest{},

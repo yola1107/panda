@@ -26,7 +26,6 @@ func (b *backend) Forward(ctx context.Context, req *internalv1.ForwardRequest) (
 	}
 
 	b.ready.Store(true)
-
 	return reply, nil
 }
 

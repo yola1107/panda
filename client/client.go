@@ -28,22 +28,22 @@ type Config struct {
 
 // Client 串行写入，允许多个请求并行等待。
 type Client struct {
+	config  Config
+	wire    *transportio.Connection
+	cancel  context.CancelFunc
+	done    chan struct{}
+	once    sync.Once
+	workers sync.WaitGroup
+
 	writes        chan *outgoing
-	writerDone    chan struct{}
-	callbacks     map[uint32]func(context.Context, []byte) error
 	pushes        chan protocol.Message
-	pushDone      chan struct{}
-	cancel        context.CancelFunc
-	config        Config
-	wire          *transportio.Connection
 	heartbeatGate chan struct{}
 	heartbeats    chan struct{}
-	done          chan struct{}
-	readerDone    chan struct{}
-	once          sync.Once
-	mu            sync.Mutex
-	next          uint32
-	pending       map[uint32]chan protocol.Message
+
+	mu        sync.Mutex
+	next      uint32
+	pending   map[uint32]chan protocol.Message
+	callbacks map[uint32]func(context.Context, []byte) error
 }
 
 // Dial 建立连接；ctx 只约束建连，连接生命周期由 Close 管理。
@@ -66,25 +66,21 @@ func Dial(ctx context.Context, config Config) (*Client, error) {
 	}
 
 	lifetime, cancel := context.WithCancel(context.Background())
-
 	c := &Client{
 		config:        config,
 		wire:          wire,
 		cancel:        cancel,
 		writes:        make(chan *outgoing, 64),
-		writerDone:    make(chan struct{}),
 		callbacks:     make(map[uint32]func(context.Context, []byte) error),
 		pushes:        make(chan protocol.Message, 64),
-		pushDone:      make(chan struct{}),
 		pending:       make(map[uint32]chan protocol.Message),
 		heartbeats:    make(chan struct{}, 1),
 		heartbeatGate: make(chan struct{}, 1),
 		done:          make(chan struct{}),
-		readerDone:    make(chan struct{}),
 	}
-	go c.read()
-	go c.send()
-	go c.dispatch(lifetime)
+	c.workers.Go(c.read)
+	c.workers.Go(c.send)
+	c.workers.Go(func() { c.dispatch(lifetime) })
 
 	return c, nil
 }
@@ -92,72 +88,11 @@ func Dial(ctx context.Context, config Config) (*Client, error) {
 // Close 关闭连接，等待读写及响应取消的推送回调退出。
 func (c *Client) Close() {
 	c.shutdown()
-	<-c.readerDone
-	<-c.writerDone
-	<-c.pushDone
+	c.workers.Wait()
 }
 
 // Done 在连接关闭时关闭。
 func (c *Client) Done() <-chan struct{} { return c.done }
-
-// Heartbeat 发送应用层心跳并等待 Gate 回复。
-func (c *Client) Heartbeat(ctx context.Context) error {
-	select {
-	case c.heartbeatGate <- struct{}{}:
-		defer func() {
-			<-c.heartbeatGate
-		}()
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.done:
-		return fault.Closed()
-	}
-
-	if started, err := c.write(ctx, protocol.Message{Type: protocol.Heartbeat}); err != nil {
-		if started {
-			c.shutdown()
-		}
-		return err
-	}
-
-	select {
-	case <-ctx.Done():
-		c.shutdown()
-		return ctx.Err()
-	case <-c.done:
-		return context.Canceled
-	case <-c.heartbeats:
-		if err := ctx.Err(); err != nil {
-			c.shutdown()
-			return err
-		}
-		return nil
-	}
-}
-
-func (c *Client) shutdown() {
-	c.once.Do(func() {
-		close(c.done)
-		c.cancel()
-		_ = c.wire.Close()
-	})
-}
-
-func (c *Client) read() {
-	defer close(c.readerDone)
-	defer c.shutdown()
-
-	for {
-		m, err := c.wire.Read(c.config.MaxSize, time.Time{})
-		if err != nil {
-			return
-		}
-
-		if !c.receive(m) {
-			return
-		}
-	}
-}
 
 // Request 关联 RequestID，取消只结束本地等待，不重试业务调用。
 func (c *Client) Request(ctx context.Context, route uint32, request, reply proto.Message) error {
@@ -181,7 +116,6 @@ func (c *Client) Request(ctx context.Context, route uint32, request, reply proto
 	id := c.next
 	ch := make(chan protocol.Message, 1)
 	c.pending[id] = ch
-
 	c.mu.Unlock()
 	defer func() {
 		c.mu.Lock()
@@ -231,6 +165,29 @@ func (c *Client) Notify(ctx context.Context, route uint32, message proto.Message
 	return err
 }
 
+func (c *Client) shutdown() {
+	c.once.Do(func() {
+		close(c.done)
+		c.cancel()
+		_ = c.wire.Close()
+	})
+}
+
+func (c *Client) read() {
+	defer c.shutdown()
+
+	for {
+		m, err := c.wire.Read(c.config.MaxSize, time.Time{})
+		if err != nil {
+			return
+		}
+
+		if !c.receive(m) {
+			return
+		}
+	}
+}
+
 func (c *Client) receive(m protocol.Message) bool {
 	switch m.Type {
 	case protocol.Response:
@@ -261,18 +218,16 @@ func (c *Client) receive(m protocol.Message) bool {
 }
 
 func decodeReply(encoding encoding.Codec, m protocol.Message, reply proto.Message) error {
-	if m.Code != 0 {
-		failure := &kerrors.Error{}
-		if err := encoding.Unmarshal(m.Payload, &failure.Status); err != nil {
-			return err
-		}
-
-		if failure.Code != m.Code {
-			return errors.New("response error code mismatch")
-		}
-
-		return failure
+	if m.Code == 0 {
+		return encoding.Unmarshal(m.Payload, reply)
 	}
 
-	return encoding.Unmarshal(m.Payload, reply)
+	failure := &kerrors.Error{}
+	if err := encoding.Unmarshal(m.Payload, &failure.Status); err != nil {
+		return err
+	}
+	if failure.Code != m.Code {
+		return errors.New("response error code mismatch")
+	}
+	return failure
 }

@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/pluginpb"
 )
 
 type method struct {
@@ -56,23 +57,24 @@ func Generate(plugin *protogen.Plugin) error {
 		}
 	}
 
-	plugin.SupportedFeatures = 1
-
+	plugin.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 	return nil
 }
 
-func (s *service) claim(number uint32, name string) error {
-	if number == 0 {
-		return fmt.Errorf("%s: route zero is reserved", name)
+func collectServices(files []*protogen.File) (map[string]*service, error) {
+	services := make(map[string]*service)
+	for _, file := range files {
+		for _, descriptor := range file.Services {
+			s := &service{proto: descriptor, file: file, numbers: make(map[uint32]string)}
+			if err := s.readMethods(); err != nil {
+				return nil, err
+			}
+
+			services[string(descriptor.Desc.FullName())] = s
+		}
 	}
 
-	if previous, exists := s.numbers[number]; exists {
-		return fmt.Errorf("%s: duplicate route %d (%s, %s)", s.proto.Desc.FullName(), number, previous, name)
-	}
-
-	s.numbers[number] = name
-
-	return nil
+	return services, nil
 }
 
 func (s *service) readMethods() error {
@@ -126,83 +128,6 @@ func readPushes(services map[string]*service, messages []*protogen.Message, gene
 	return nil
 }
 
-func (s *service) validateLogin() error {
-	logins := 0
-
-	for _, method := range s.methods {
-		if method.route.Kind == routev1.Kind_KIND_LOGIN {
-			logins++
-		}
-	}
-
-	if logins != 1 {
-		return fmt.Errorf("%s: exactly one login route is required", s.proto.Desc.FullName())
-	}
-
-	return nil
-}
-
-func collectServices(files []*protogen.File) (map[string]*service, error) {
-	services := make(map[string]*service)
-
-	for _, file := range files {
-		for _, descriptor := range file.Services {
-			s := &service{proto: descriptor, file: file, numbers: make(map[uint32]string)}
-			if err := s.readMethods(); err != nil {
-				return nil, err
-			}
-
-			services[string(descriptor.Desc.FullName())] = s
-		}
-	}
-
-	return services, nil
-}
-
-func activeServices(file *protogen.File, services map[string]*service) ([]*service, error) {
-	var active []*service
-
-	for _, descriptor := range file.Services {
-		s := services[string(descriptor.Desc.FullName())]
-		if len(s.methods) == 0 && len(s.pushes) == 0 {
-			continue
-		}
-
-		if err := s.validateLogin(); err != nil {
-			return nil, err
-		}
-		if err := s.validateNames(); err != nil {
-			return nil, err
-		}
-
-		active = append(active, s)
-	}
-
-	return active, nil
-}
-
-func (s *service) validateNames() error {
-	routes := make(map[string]string)
-	methods := make(map[string]string)
-	for _, m := range s.methods {
-		name := string(m.proto.Desc.FullName())
-		routes[m.proto.GoName] = name
-		methods[m.proto.GoName] = name
-	}
-	for _, p := range s.pushes {
-		name := p.message.GoIdent.GoName
-		if conflict := routes["Push"+name]; conflict != "" {
-			return fmt.Errorf("%s: generated route identifier conflicts with %s", p.message.Desc.FullName(), conflict)
-		}
-		if conflict := methods["On"+name]; conflict != "" {
-			return fmt.Errorf("%s: generated callback identifier conflicts with %s", p.message.Desc.FullName(), conflict)
-		}
-		routes["Push"+name] = string(p.message.Desc.FullName())
-		methods["On"+name] = string(p.message.Desc.FullName())
-	}
-	return nil
-}
-
 func registerPush(services map[string]*service, message *protogen.Message, generated bool) error {
 	route, ok := proto.GetExtension(message.Desc.Options(), routev1.E_Push).(*routev1.Push)
 	if !ok || route == nil || route.Service == "" {
@@ -223,5 +148,79 @@ func registerPush(services map[string]*service, message *protogen.Message, gener
 	}
 
 	s.pushes = append(s.pushes, push{message: message, route: route})
+	return nil
+}
+
+func (s *service) claim(number uint32, name string) error {
+	if number == 0 {
+		return fmt.Errorf("%s: route zero is reserved", name)
+	}
+	if previous, exists := s.numbers[number]; exists {
+		return fmt.Errorf("%s: duplicate route %d (%s, %s)", s.proto.Desc.FullName(), number, previous, name)
+	}
+
+	s.numbers[number] = name
+	return nil
+}
+
+func activeServices(file *protogen.File, services map[string]*service) ([]*service, error) {
+	var active []*service
+	for _, descriptor := range file.Services {
+		s := services[string(descriptor.Desc.FullName())]
+		if len(s.methods) == 0 && len(s.pushes) == 0 {
+			continue
+		}
+
+		if err := s.validateLogin(); err != nil {
+			return nil, err
+		}
+		if err := s.validateNames(); err != nil {
+			return nil, err
+		}
+
+		active = append(active, s)
+	}
+
+	return active, nil
+}
+
+func (s *service) validateLogin() error {
+	logins := 0
+	for _, method := range s.methods {
+		if method.route.Kind == routev1.Kind_KIND_LOGIN {
+			logins++
+		}
+	}
+
+	if logins != 1 {
+		return fmt.Errorf("%s: exactly one login route is required", s.proto.Desc.FullName())
+	}
+
+	return nil
+}
+
+func (s *service) validateNames() error {
+	// 路由常量与客户端方法分别检查名称冲突。
+	routes := make(map[string]string)
+	methods := make(map[string]string)
+	for _, m := range s.methods {
+		name := string(m.proto.Desc.FullName())
+		routes[m.proto.GoName] = name
+		methods[m.proto.GoName] = name
+	}
+
+	for _, p := range s.pushes {
+		name := p.message.GoIdent.GoName
+		if conflict := routes["Push"+name]; conflict != "" {
+			return fmt.Errorf("%s: generated route identifier conflicts with %s", p.message.Desc.FullName(), conflict)
+		}
+		if conflict := methods["On"+name]; conflict != "" {
+			return fmt.Errorf("%s: generated callback identifier conflicts with %s", p.message.Desc.FullName(), conflict)
+		}
+
+		routes["Push"+name] = string(p.message.Desc.FullName())
+		methods["On"+name] = string(p.message.Desc.FullName())
+	}
+
 	return nil
 }

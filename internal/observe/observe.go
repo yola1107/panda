@@ -34,6 +34,9 @@ func (t requestTransport) ReplyHeader() transport.Header   { return t.header }
 
 // Server 包装一个服务端操作，使用当前链路作为父级。
 func Server(ctx context.Context, operation string, request any, next middleware.Handler) (any, error) {
-	ctx = transport.NewServerContext(ctx, requestTransport{operation: operation, header: carrier{Header: make(http.Header)}})
+	ctx = transport.NewServerContext(ctx, requestTransport{
+		operation: operation,
+		header:    carrier{Header: make(http.Header)},
+	})
 	return tracing.Server()(next)(ctx, request)
 }

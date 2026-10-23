@@ -34,6 +34,7 @@ func (p *Pusher) Push(ctx context.Context, target session.Session, route uint32,
 	if p == nil || p.discovery == nil {
 		return errors.New("gate discovery is required")
 	}
+
 	instances, err := p.discovery.GetService(ctx, GateService)
 	if err != nil {
 		return err
@@ -61,7 +62,6 @@ func (p *Pusher) Push(ctx context.Context, target session.Session, route uint32,
 			Route:     route,
 			Payload:   payload,
 		})
-
 		return err
 	}
 

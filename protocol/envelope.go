@@ -62,9 +62,11 @@ func Decode(b []byte, maxSize int) (Message, error) {
 	}
 
 	m := Message{
-		Type: Type(b[0]), Route: binary.BigEndian.Uint32(b[1:5]),
-		RequestID: binary.BigEndian.Uint32(b[5:9]), Code: decodeCode(binary.BigEndian.Uint32(b[9:13])),
-		Payload: b[HeaderSize:],
+		Type:      Type(b[0]),
+		Route:     binary.BigEndian.Uint32(b[1:5]),
+		RequestID: binary.BigEndian.Uint32(b[5:9]),
+		Code:      decodeCode(binary.BigEndian.Uint32(b[9:13])),
+		Payload:   b[HeaderSize:],
 	}
 
 	return m, m.Validate()
@@ -77,7 +79,6 @@ func (m Message) Validate() error {
 	}
 
 	valid := false
-
 	switch m.Type {
 	case Request, Response:
 		valid = m.Route != 0 && m.RequestID != 0

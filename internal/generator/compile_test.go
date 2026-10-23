@@ -21,7 +21,6 @@ func TestGeneratedCode(t *testing.T) {
 	t.Parallel()
 
 	request := fixture()
-
 	file := request.ProtoFile[1]
 	file.Service[0].Method[1].Name = new("Update")
 	for i, m := range file.Service[0].Method {
@@ -54,7 +53,6 @@ func TestGeneratedCode(t *testing.T) {
 
 	directory := t.TempDir()
 	writeGenerated(t, directory, plugin.Response())
-
 	data, err := proto.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +88,7 @@ func TestGeneratedCode(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(directory, "go.mod"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	command = exec.CommandContext(t.Context(), "go", "test", "-mod=mod", "-timeout=20s", ".")
 	command.Dir = directory
 	if output, err := command.CombinedOutput(); err != nil {
@@ -153,6 +152,7 @@ func TestGeneratedServices(t *testing.T) {
 			if err := RegisterOther(n, h); err != nil {
 				t.Fatal(err)
 			}
+
 			g, err := gate.New(gate.Config{
 				ID: "generated",
 				Entries: []gate.Entry{
@@ -176,6 +176,7 @@ func TestGeneratedServices(t *testing.T) {
 				t.Fatal(err)
 			}
 			n.SetPusher(g)
+
 			done := make(chan error, 1)
 			go func() {
 				done <- g.Start(t.Context())
@@ -198,6 +199,7 @@ func TestGeneratedServices(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("startup timeout")
 			}
+
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
 			a, err := client.Dial(ctx, client.Config{
@@ -218,6 +220,7 @@ func TestGeneratedServices(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer b.Close()
+
 			first, second := NewEchoPandaClient(a), NewOtherPandaClient(b)
 			if _, err := first.Login(ctx, wrapperspb.String("")); err != nil {
 				t.Fatal(err)
@@ -232,6 +235,7 @@ func TestGeneratedServices(t *testing.T) {
 				t.Fatal(err)
 			}
 			targetA, targetB := <-h.sessions, <-h.sessions
+
 			messages := make(chan string, 2)
 			first.OnUpdate(func(_ context.Context, v *Update) error {
 				messages <- v.Value
@@ -247,6 +251,7 @@ func TestGeneratedServices(t *testing.T) {
 			if err := PushOtherSecond(ctx, n, targetB, &Second{Value: "two"}); err != nil {
 				t.Fatal(err)
 			}
+
 			seen := map[string]bool{}
 			for range 2 {
 				select {

@@ -17,19 +17,21 @@ import (
 // Gate 实现 Kratos transport.Server；每个实例只能启动一次。
 type Gate struct {
 	internalv1.UnimplementedGateServer
-	config      Config
-	selector    Selector
+	config   Config
+	selector Selector
+
 	mu          sync.Mutex
 	connections map[*connection]struct{}
 	listeners   []net.Listener
 	servers     []*http.Server
 	addresses   []string
-	ready       chan struct{}
-	done        chan struct{}
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
 	started     bool
 	stopped     bool
+
+	ready  chan struct{}
+	done   chan struct{}
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // New 校验配置；Start 时才绑定监听端口。
@@ -81,21 +83,17 @@ func (g *Gate) Start(ctx context.Context) error {
 	ctx, g.cancel = context.WithCancel(ctx)
 	err := g.listen(ctx)
 	g.mu.Unlock()
-
-	if err != nil {
+	defer func() {
 		g.shutdown()
 		g.wg.Wait()
 		close(g.done)
-
+	}()
+	if err != nil {
 		return err
 	}
 
 	close(g.ready)
 	<-ctx.Done()
-	g.shutdown()
-	g.wg.Wait()
-	close(g.done)
-
 	return nil
 }
 

@@ -17,17 +17,19 @@ type connection struct {
 	id           string
 	wire         *transportio.Connection
 	entry        Entry
-	cancel       context.CancelFunc
-	mu           sync.Mutex
-	closed       bool
-	done         chan struct{}
-	send         chan []byte
-	backend      Backend
-	session      *internalv1.Session
-	login        bool
 	authDeadline time.Time
-	slots        chan struct{}
-	workers      sync.WaitGroup
+
+	mu      sync.Mutex
+	closed  bool
+	backend Backend
+	session *internalv1.Session
+	login   bool
+
+	cancel  context.CancelFunc
+	done    chan struct{}
+	send    chan []byte
+	slots   chan struct{}
+	workers sync.WaitGroup
 }
 
 func newConnection(gate *Gate, wire *transportio.Connection, entry Entry, cancel context.CancelFunc) *connection {
@@ -59,10 +61,7 @@ func (c *connection) close() {
 }
 
 func (c *connection) run(ctx context.Context) {
-	var workers sync.WaitGroup
-
-	workers.Go(func() { c.write(ctx) })
-	defer workers.Wait()
+	c.workers.Go(func() { c.write(ctx) })
 	defer c.workers.Wait()
 
 	timer := time.AfterFunc(c.entry.AuthTimeout, c.expireAuthentication)
@@ -111,7 +110,6 @@ func (c *connection) enqueue(m protocol.Message) bool {
 	default:
 		c.mu.Unlock()
 		c.close()
-
 		return false
 	}
 }

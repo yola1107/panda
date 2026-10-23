@@ -26,9 +26,12 @@ func (d Discovery) Watch(ctx context.Context, name string) (registry.Watcher, er
 		return nil, err
 	}
 
-	w := &watcher{values: make(chan []*registry.ServiceInstance, 1), done: make(chan struct{}), parent: ctx.Done()}
+	w := &watcher{
+		values: make(chan []*registry.ServiceInstance, 1),
+		done:   make(chan struct{}),
+		parent: ctx.Done(),
+	}
 	w.values <- d[name]
-
 	return w, nil
 }
 

@@ -18,6 +18,7 @@ var spanRecorder = tracetest.NewSpanRecorder()
 func TestMain(m *testing.M) {
 	provider := trace.NewTracerProvider(trace.WithSpanProcessor(spanRecorder))
 	otel.SetTracerProvider(provider)
+
 	code := m.Run()
 	if err := provider.Shutdown(context.Background()); err != nil {
 		code = 1
@@ -27,17 +28,23 @@ func TestMain(m *testing.M) {
 
 func TestTracing(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
-				return &echov1.SayReply{Text: oteltrace.SpanContextFromContext(ctx).TraceID().String()}, nil
-			}
-		}})
+
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
+					return &echov1.SayReply{Text: oteltrace.SpanContextFromContext(ctx).TraceID().String()}, nil
+				}
+			},
+		})
 		_, api := h.dial(t)
 		login(t, api)
+
 		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
+
 		reply, err := api.Say(ctx, &echov1.SayRequest{})
 		if err != nil {
 			t.Fatal(err)
@@ -48,11 +55,13 @@ func TestTracing(t *testing.T) {
 
 func assertTrace(t *testing.T, id string, separated bool) {
 	t.Helper()
+
 	foundGate, foundNode, foundRPC := false, false, false
 	for _, span := range spanRecorder.Ended() {
 		if span.SpanContext().TraceID().String() != id {
 			continue
 		}
+
 		switch span.Name() {
 		case "/gate/echo.v1.Echo/2":
 			foundGate = true
@@ -65,6 +74,7 @@ func assertTrace(t *testing.T, id string, separated bool) {
 			foundRPC = span.Parent().IsValid()
 		}
 	}
+
 	if !foundGate || !foundNode || (separated && !foundRPC) {
 		t.Fatalf("trace chain incomplete: Gate=%t Node=%t RPC=%t", foundGate, foundNode, foundRPC)
 	}

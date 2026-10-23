@@ -17,13 +17,74 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Forward 对本地与 RPC 转交执行相同的验证、中间件和期限处理。
+func (n *Node) Forward(ctx context.Context, req *internalv1.ForwardRequest) (*internalv1.ForwardReply, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fault.Normalize(err)
+	}
+
+	route, err := n.resolve(req)
+	if err != nil {
+		return nil, err
+	}
+
+	n.mu.Lock()
+	select {
+	case <-n.done:
+		n.mu.Unlock()
+		return nil, fault.Closed()
+	default:
+	}
+
+	select {
+	case n.slots <- struct{}{}:
+	default:
+		n.mu.Unlock()
+		return nil, fault.Overloaded()
+	}
+
+	n.workers.Add(1)
+	n.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type outcome struct {
+		reply *internalv1.ForwardReply
+		err   error
+	}
+
+	finished := make(chan outcome, 1)
+	go func() {
+		defer n.workers.Done()
+		defer func() {
+			<-n.slots
+		}()
+
+		reply, err := n.execute(ctx, req, route)
+		finished <- outcome{reply, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, fault.Normalize(ctx.Err())
+	case <-n.done:
+		return nil, fault.Closed()
+	case result := <-finished:
+		if err := ctx.Err(); err != nil {
+			return nil, fault.Normalize(err)
+		}
+
+		return result.reply, result.err
+	}
+}
+
 func (n *Node) resolve(req *internalv1.ForwardRequest) (Route, error) {
 	if err := validateConnection(req); err != nil {
 		return Route{}, err
 	}
 
 	c := req.Connection
-
 	n.mu.Lock()
 	n.started = true
 	s, ok := n.services[c.Service]
@@ -89,7 +150,8 @@ func (n *Node) execute(ctx context.Context, req *internalv1.ForwardRequest, rout
 		return route.Handle(ctx, message)
 	})
 
-	value, err := observe.Server(ctx, "/node/"+c.Service+"/"+strconv.FormatUint(uint64(route.Number), 10), message, handler)
+	operation := "/node/" + c.Service + "/" + strconv.FormatUint(uint64(route.Number), 10)
+	value, err := observe.Server(ctx, operation, message, handler)
 	if err != nil {
 		return nil, fault.Normalize(err)
 	}

@@ -34,14 +34,17 @@ func (c *Client) write(ctx context.Context, message protocol.Message) (bool, err
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
+
 	data, err := protocol.Encode(message, c.config.MaxSize)
 	if err != nil {
 		return false, err
 	}
+
 	deadline := time.Now().Add(5 * time.Second)
 	if limit, ok := ctx.Deadline(); ok && limit.Before(deadline) {
 		deadline = limit
 	}
+
 	item := &outgoing{data: data, deadline: deadline, result: make(chan error, 1)}
 	select {
 	case <-ctx.Done():
@@ -50,6 +53,7 @@ func (c *Client) write(ctx context.Context, message protocol.Message) (bool, err
 		return false, fault.Closed()
 	case c.writes <- item:
 	}
+
 	select {
 	case <-ctx.Done():
 		return item.cancel(), ctx.Err()
@@ -64,8 +68,8 @@ func (c *Client) write(ctx context.Context, message protocol.Message) (bool, err
 }
 
 func (c *Client) send() {
-	defer close(c.writerDone)
 	defer c.shutdown()
+
 	for {
 		select {
 		case <-c.done:
@@ -75,6 +79,7 @@ func (c *Client) send() {
 				item.result <- context.Canceled
 				continue
 			}
+
 			err := c.wire.Write(item.data, item.deadline)
 			item.result <- err
 			if err != nil {

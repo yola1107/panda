@@ -40,7 +40,7 @@ func WriteTCP(w io.Writer, m Message, maxSize int) error {
 // WriteFrame 为已编码的信封添加 TCP 长度前缀。
 func WriteFrame(w io.Writer, b []byte) error {
 	size := len(b)
-	if size < 0 || uint64(size) > math.MaxUint32 {
+	if uint64(size) > math.MaxUint32 {
 		return errors.New("TCP frame exceeds uint32 length")
 	}
 

@@ -18,6 +18,7 @@ const (
 
 func TestExecutionTimeout(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
@@ -55,6 +56,7 @@ func TestExecutionTimeout(t *testing.T) {
 
 func TestLateLogin(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
@@ -99,18 +101,22 @@ func TestLateLogin(t *testing.T) {
 
 func TestConnectionLimitAndCancellation(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
 		entered, exited := make(chan struct{}, 1), make(chan struct{}, 1)
-		h := start(t, mode, settings{entry: gate.Entry{MaxInFlight: 1}, customize: func(h *handler) {
-			h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
-				entered <- struct{}{}
-				<-ctx.Done()
-				exited <- struct{}{}
-				return nil, ctx.Err()
-			}
-		}})
+		h := start(t, mode, settings{
+			entry: gate.Entry{MaxInFlight: 1},
+			customize: func(h *handler) {
+				h.say = func(ctx context.Context, _ *echov1.SayRequest) (*echov1.SayReply, error) {
+					entered <- struct{}{}
+					<-ctx.Done()
+					exited <- struct{}{}
+					return nil, ctx.Err()
+				}
+			},
+		})
 		c, api := h.dial(t)
 		login(t, api)
 
@@ -143,11 +149,11 @@ func TestConnectionLimitAndCancellation(t *testing.T) {
 
 func TestNodeLimitRetainedUntilHandlerExit(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
 		release, exited := make(chan struct{}), make(chan struct{})
-
 		var running, maximum atomic.Int32
 
 		h := start(t, mode, settings{
@@ -204,26 +210,27 @@ func TestNodeLimitRetainedUntilHandlerExit(t *testing.T) {
 
 func TestClientCancellation(t *testing.T) {
 	t.Parallel()
+
 	matrix(t, func(t *testing.T, mode deployment) {
 		t.Helper()
 
 		entered, release := make(chan struct{}, 1), make(chan struct{})
-
 		var calls atomic.Int32
 
-		h := start(t, mode, settings{customize: func(h *handler) {
-			h.say = func(ctx context.Context, req *echov1.SayRequest) (*echov1.SayReply, error) {
-				calls.Add(1)
+		h := start(t, mode, settings{
+			customize: func(h *handler) {
+				h.say = func(ctx context.Context, req *echov1.SayRequest) (*echov1.SayReply, error) {
+					calls.Add(1)
 
-				if req.Text == slowText {
-					entered <- struct{}{}
+					if req.Text == slowText {
+						entered <- struct{}{}
+						<-release
+					}
 
-					<-release
+					return h.base.Say(ctx, req)
 				}
-
-				return h.base.Say(ctx, req)
-			}
-		}})
+			},
+		})
 		t.Cleanup(func() {
 			select {
 			case <-release:
@@ -235,7 +242,6 @@ func TestClientCancellation(t *testing.T) {
 		login(t, api)
 		ctx, cancel := context.WithCancel(t.Context())
 		result := make(chan error, 1)
-
 		go func() {
 			_, err := api.Say(ctx, &echov1.SayRequest{Text: slowText})
 			result <- err
