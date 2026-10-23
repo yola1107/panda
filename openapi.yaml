@@ -1,0 +1,38 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: GreeterService API
+    description: GreeterService 提供用于接入 HTTP 和 gRPC 的最小问候接口。
+    version: 0.0.1
+paths:
+    /v1/hello/{name}:
+        get:
+            tags:
+                - GreeterService
+            description: SayHello 根据请求中的姓名返回问候消息。
+            operationId: GreeterService_SayHello
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/helloworld.v1.SayHelloResponse'
+components:
+    schemas:
+        helloworld.v1.SayHelloResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+            description: SayHelloResponse 返回生成的问候消息。
+tags:
+    - name: GreeterService
