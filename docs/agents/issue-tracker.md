@@ -7,7 +7,7 @@
 - 每个功能一个目录：`.scratch/<feature-slug>/`。
 - 规格：`.scratch/<feature-slug>/spec.md`。
 - 实现任务：`.scratch/<feature-slug>/issues/<NN>-<slug>.md`，从 `01` 编号，每张任务独立成文件。
-- 分诊状态写在任务文件顶部附近的 `Status:` 行，取值见 `triage-labels.md`。
+- 分诊时，将标签写在任务文件顶部附近的 `Status:` 行，取值见 [分诊标签](triage-labels.md)。
 - 评论和讨论追加到文件末尾的 `## Comments` 下，保留已有历史。
 
 ## 技能操作映射
@@ -16,6 +16,8 @@
 - “获取任务”：读取用户提供的路径；只有编号时，在对应功能目录中定位文件。
 
 ## Wayfinding 操作
+
+采用 Wayfinding 流程时，按以下约定记录文件与执行状态：
 
 - 决策地图：`.scratch/<effort>/map.md`，记录 Notes、Decisions-so-far 和 Fog。
 - 子任务：`.scratch/<effort>/issues/NN-<slug>.md`，从 `01` 编号，正文记录待解决的问题。

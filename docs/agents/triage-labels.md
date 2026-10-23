@@ -9,4 +9,4 @@
 | `wontfix` | `wontfix` | 不予处理 |
 
 技能要求应用分诊角色时，使用表中对应标签。
-本地 Markdown 任务将标签写入 `Status:` 行。
+标签记录方式见 [任务文件约定](issue-tracker.md#文件约定)。
