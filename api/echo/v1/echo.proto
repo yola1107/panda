@@ -1,0 +1,56 @@
+syntax = "proto3";
+package echo.v1;
+
+import "google/protobuf/empty.proto";
+import "panda/route/v1/route.proto";
+
+option go_package = "github.com/yola1107/panda/api/echo/v1;echov1";
+
+// Echo 演示一个逻辑服务的四种业务交互。
+service Echo {
+  rpc Login(LoginRequest) returns (LoginReply) {
+    option (panda.route.v1.route) = {
+      number: 1
+      kind: KIND_LOGIN
+    };
+  }
+  rpc Say(SayRequest) returns (SayReply) {
+    option (panda.route.v1.route) = {
+      number: 2
+      kind: KIND_REQUEST
+    };
+  }
+  rpc Report(ReportRequest) returns (google.protobuf.Empty) {
+    option (panda.route.v1.route) = {
+      number: 3
+      kind: KIND_NOTIFY
+    };
+  }
+}
+
+message LoginRequest {
+  string token = 1;
+}
+
+message LoginReply {
+  string greeting = 1;
+}
+message SayRequest {
+  string text = 1;
+}
+
+message SayReply {
+  string text = 1;
+  string user_id = 2;
+}
+
+message ReportRequest {
+  string text = 1;
+}
+message Update {
+  option (panda.route.v1.push) = {
+    number: 4
+    service: "echo.v1.Echo"
+  };
+  string text = 1;
+}

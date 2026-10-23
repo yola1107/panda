@@ -17,3 +17,7 @@ plugins:
     opt:
       - fq_schema_naming=true
       - default_response=false
+  - local: ["go", "run", "./cmd/protoc-gen-go-panda"]
+    out: api
+    strategy: all
+    opt: paths=source_relative

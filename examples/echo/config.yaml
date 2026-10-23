@@ -1,0 +1,41 @@
+# 默认限制；时间值单位为纳秒，M1 不做热更新。
+node_max_executing: 256
+node_rpc: 127.0.0.1:19090
+gate_rpc: 127.0.0.1:19091
+gate:
+  id: example-gate
+  entries:
+    - &entry
+      network: tcp
+      address: 127.0.0.1:17070
+      service: echo.v1.Echo
+      codec: proto
+      login_route: 1
+      max_size: 65536
+      auth_timeout: 10000000000 # 10s
+      idle_timeout: 60000000000 # 60s
+      execution_timeout: 5000000000 # 5s，也用于网络写入期限
+      send_queue: 64
+      max_in_flight: 16
+    - <<: *entry
+      network: websocket
+      address: 127.0.0.1:18080
+      path: /echo/proto
+    - <<: *entry
+      codec: json
+      address: 127.0.0.1:17071
+    - <<: *entry
+      network: websocket
+      codec: json
+      address: 127.0.0.1:18080
+      path: /echo/json
+# 演示使用静态实例表；生产环境将 Registry 替换成 Kratos 注册中心实现。
+discovery:
+  echo.v1.Echo:
+    - id: example-node
+      name: echo.v1.Echo
+      endpoints: [grpc://127.0.0.1:19090]
+  panda.gate:
+    - id: example-gate
+      name: panda.gate
+      endpoints: [grpc://127.0.0.1:19091]

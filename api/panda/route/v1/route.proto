@@ -1,0 +1,29 @@
+syntax = "proto3";
+package panda.route.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/yola1107/panda/api/panda/route/v1;routev1";
+
+// Kind 声明客户端上行交互，未声明的方法仍为普通 RPC。
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_REQUEST = 1;
+  KIND_NOTIFY = 2;
+  KIND_LOGIN = 3;
+}
+message Route {
+  uint32 number = 1;
+  Kind kind = 2;
+}
+message Push {
+  uint32 number = 1;
+  // service 是所属 proto service 的全限定名，不带前导点。
+  string service = 2;
+}
+extend google.protobuf.MethodOptions {
+  Route route = 50001;
+}
+extend google.protobuf.MessageOptions {
+  Push push = 50002;
+}
