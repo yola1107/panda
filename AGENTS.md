@@ -30,7 +30,7 @@ Panda 是基于 Kratos 的长连接框架及相关服务，仓库根目录只有
 
 ## 按需阅读
 
-- 编写或审查 Go 代码前，读取 [Go 编码规范](docs/agents/go-styles.md)。
+- 编写或审查 Go 代码前，读取 [Go 编码规范](docs/agents/go-styles.md) 和 [.golangci.yml](.golangci.yml)。
 - 探索代码、讨论领域概念或设计功能前，按 [领域文档约定](docs/agents/domain.md) 读取相关资料。
 - 读取、创建或更新任务及规格时，遵循 [任务与规格约定](docs/agents/issue-tracker.md)。
 - 分诊时，使用 [分诊标签](docs/agents/triage-labels.md)。

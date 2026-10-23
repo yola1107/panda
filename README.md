@@ -108,7 +108,7 @@ go test ./protocol -run '^$' -fuzz FuzzWebSocket -fuzztime 5s
 
 ```sh
 make init       # 安装 Wire、Buf 和 golangci-lint
-make api        # 格式化 proto 并生成 Go 代码和 openapi.yaml
+make api        # 生成 Go 代码和 openapi.yaml
 make generate   # 执行 go generate 并整理依赖
 make all        # 依次执行 api、generate
 make build      # 编译全部包；有服务入口后，将可执行文件输出到 bin/
@@ -117,7 +117,7 @@ make help       # 查看所有目标
 ```
 
 `api/helloworld/v1/hello.proto` 只定义 `GreeterService.SayHello`，HTTP 路径为 `GET /v1/hello/{name}`。
-`make api` 先执行 `buf format -w` 格式化 proto，再按 `buf.gen.yaml` 生成代码和 OpenAPI 文档。
+`make api` 按 `buf.gen.yaml` 生成代码；需要格式化 proto 时，单独执行 `buf format -w`。
 生成方式沿用 `kratos-layout` 的 Buf 配置，插件版本固定在 `buf.gen.yaml`，通过 `go run` 调用。
 Go 依赖版本参考该模板；工具安装可由 Go 自动下载所需工具链。
 
